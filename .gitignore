@@ -1,1 +1,6 @@
 #twitteranalytics-jsonsercretkey.json
+.venv
+target
+kaisai_post_line_prefecture_wasout.py
+src/__pycache__/utils.cpython-39.pyc
+target.zip
