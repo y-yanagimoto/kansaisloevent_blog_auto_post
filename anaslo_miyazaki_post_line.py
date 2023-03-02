@@ -3,6 +3,7 @@ from time import sleep
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
@@ -41,7 +42,9 @@ cols = ['機種名', '台番号', 'G数', '差枚', 'BB', 'RB', 'ART', 'BB確率
 ichiran_all_tennpo_df = pd.DataFrame(index=[], columns=cols)
 prefecture = '宮崎県'
 yesterday = datetime.date.today() + datetime.timedelta(days=-1)
-browser = webdriver.Chrome(ChromeDriverManager().install())
+options = Options()
+options.add_argument('--blink-settings=imagesEnabled=false')
+browser = webdriver.Chrome(ChromeDriverManager().install(),options=options)
 url = f'https://ana-slo.com/%E3%83%9B%E3%83%BC%E3%83%AB%E3%83%87%E3%83%BC%E3%82%BF/{prefecture}/'
 browser.get(url)
 html = browser.page_source.encode('utf-8')
@@ -70,8 +73,8 @@ for tenpo_name in tenpo_ichiran_df['ホール名'] :#tenpo_ichiran_df['ホール
         time.sleep(1)
         continue
     i += 1
-    if i > 2:
-        break
+    # if i > 2:
+    #     break
 
 #post_line_text('処理おわり')
 browser.quit()
