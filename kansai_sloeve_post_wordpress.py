@@ -6,15 +6,20 @@ import pandas as pd
 import unicodedata
 import string
 import urllib
+import os
+from wordpress_xmlrpc.methods import media, posts
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from PIL import Image, ImageFilter,ImageFont,ImageDraw
 #③実行する
 import gspread
 import json
+import glob
+import shutil
 #ServiceAccountCredentials：Googleの各サービスへアクセスできるservice変数を生成します。
 from oauth2client.service_account import ServiceAccountCredentials 
 from gspread_dataframe import get_as_dataframe, set_with_dataframe
@@ -28,6 +33,122 @@ from wordpress_xmlrpc.methods.posts import GetPosts, NewPost
 # from utils import *
 import datetime
 import time
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.events import EventFiringWebDriver, AbstractEventListener
+
+def upload_image(in_image_file_name, out_image_file_name):
+    if os.path.exists(in_image_file_name):
+        with open(in_image_file_name, 'rb') as f:
+            binary = f.read()
+
+        data = {
+            "name": out_image_file_name,
+            "type": 'image/png',
+            "overwrite": True,
+            "bits": binary
+        }
+
+        media_id = wp.call(media.UploadFile(data))['id']
+        print(in_image_file_name.split('/')
+              [-1], 'Upload Success : id=%s' % media_id)
+        return media_id
+    else:
+        print(in_image_file_name.split('/')[-1], 'NO IMAGE!!')
+
+#upload_image(upload_image_path,f'completed_image_{value["-text_date-"]}-{value["-tenpo_name-"]}_{target_num}.png')
+
+def get_concat_h_multi_resize(im_list, resample=Image.BICUBIC):
+    min_height = min(im.height for im in im_list)
+    im_list_resize = [im.resize((int(im.width * min_height / im.height), min_height),resample=resample)
+                    for im in im_list]
+    total_width = sum(im.width for im in im_list_resize)
+    dst = Image.new('RGB', (total_width, min_height))
+    pos_x = 0
+    for im in im_list_resize:
+        dst.paste(im, (pos_x, 0))
+        pos_x += im.width
+    return dst
+
+def get_concat_v_multi_resize(im_list, resample=Image.BICUBIC):
+    min_width = min(im.width for im in im_list)
+    im_list_resize = [im.resize((min_width, int(im.height * min_width / im.width)),resample=resample)
+                    for im in im_list]
+    total_height = sum(im.height for im in im_list_resize)
+    dst = Image.new('RGB', (min_width, total_height))
+    pos_y = 0
+    for im in im_list_resize:
+        dst.paste(im, (0, pos_y))
+        pos_y += im.height
+    return dst
+
+def generate_pickup_slump_graphe_image(im_list,value,target_num):
+    global upload_image_path
+    print('im_listの長さ',len(im_list))
+    upload_image_path =f'temp/completed_image_{value["-text_date-"]}-{value["-tenpo_name-"]}_{target_num}.png'
+    if len(im_list) <= 4:
+        get_concat_h_multi_resize(im_list).save(upload_image_path)
+
+    elif 4 < len(im_list) <= 8:
+        get_concat_h_multi_resize(im_list[:4]).save('temp/h_concat_1.png')
+        im = Image.open('image/white.png')
+        while True:
+            im_list.append(im)
+            if len(im_list) == 8:
+                break
+        get_concat_h_multi_resize(im_list[4:]).save('temp/h_concat_2.png')
+        
+        im1 = Image.open('temp/h_concat_1.png')
+        im2 = Image.open('temp/h_concat_2.png')
+        get_concat_v_multi_resize([im1,im2]).save(upload_image_path)
+
+    elif 8 < len(im_list) <= 12:
+        get_concat_h_multi_resize(im_list[:4]).save('temp/h_concat_1.png')
+        get_concat_h_multi_resize(im_list[4:8]).save('temp/h_concat_2.png')
+        im = Image.open('image/white.png')
+        while True:
+            im_list.append(im)
+            if len(im_list) >= 12:
+                break
+        get_concat_h_multi_resize(im_list[8:]).save('temp/h_concat_3.png')
+        im1 = Image.open('temp/h_concat_1.png')
+        im2 = Image.open('temp/h_concat_2.png')
+        im3 = Image.open('temp/h_concat_3.png')
+        get_concat_v_multi_resize([im1,im2,im3]).save(upload_image_path)
+
+    elif 12 < len(im_list) <= 16:
+        get_concat_h_multi_resize(im_list[:4]).save('temp/h_concat_1.png')
+        get_concat_h_multi_resize(im_list[4:8]).save('temp/h_concat_2.png')
+        get_concat_h_multi_resize(im_list[8:12]).save('temp/h_concat_3.png')
+        im = Image.open('image/white.png')
+        while True:
+            im_list.append(im)
+            if len(im_list) >= 16:
+                break
+        get_concat_h_multi_resize(im_list[12:]).save('temp/h_concat_4.png')
+        im1 = Image.open('temp/h_concat_1.png')
+        im2 = Image.open('temp/h_concat_2.png')
+        im3 = Image.open('temp/h_concat_3.png')
+        im4 = Image.open('temp/h_concat_4.png')
+        get_concat_v_multi_resize([im1,im2,im3,im4]).save(upload_image_path)
+    else:
+        print('パスしました')
+        pass
+    return upload_image_path
+
+
+def resize_image(image_path):
+    conpleted_im = Image.open(image_path)
+    # サイズを幅と高さにアンパック
+    width, height = conpleted_im.size
+    print(width,height)
+    # 矩形の幅と画像の幅の比率を計算
+    x_ratio = width / conpleted_im.height
+    print(x_ratio)
+
+    # リサイズ後の画像サイズにリサイズ
+    resized_image = conpleted_im.resize((920,int(920/x_ratio)),resample=Image.LANCZOS)
+    resized_image.save(image_path)
 
 def removal_text(text):
     text = unicodedata.normalize("NFKC", text)
@@ -48,7 +169,6 @@ def post_line_text_and_image(message,image_path,token):
     print('image_path',image_path)
     files = {"imageFile":open(image_path,'rb')}
     post = requests.post(url ,headers = headers ,params=payload,files=files) 
-
 
 def get_selenium_tenpo_data(value):
     global prefecture
@@ -77,6 +197,7 @@ def get_selenium_tenpo_data(value):
             ichiran_df.insert(0,'店舗名',first_column)
             break
     tenpo_day_data_df = ichiran_df
+    tenpo_day_data_df = tenpo_day_data_df.sort_values('台番号')
     return tenpo_day_data_df
 
 def write_dataframe_to_spreadsheet(write_spreadsheet_df,value):
@@ -141,6 +262,7 @@ def write_dataframe_to_spreadsheet(write_spreadsheet_df,value):
         kisyubetu_master_df_list.append(kisyu_df)
         kisyu_win_daisuu = len(kisyu_df[kisyu_df['差枚'] > 0])
         kisyubetu_win_daissuu_list.append(kisyu_win_daisuu)
+
     kisyubetu_master_df['勝率'] = kisyubetu_win_daissuu_list
     kisyubetu_master_df['勝率'] = kisyubetu_master_df['勝率'].astype(str)
     kisyubetu_master_df['総台数'] = kisyubetu_master_df['総台数'].astype(int)
@@ -166,14 +288,50 @@ def set_round_int(x):
     x = int(round(x, 0))
     return x
     
-
 def post_wordpress(workbook,worksheet,value):
-    
+    global extract_read_worksheet_df,read_worksheet_df
     read_worksheet_df = pd.DataFrame(worksheet.get_all_values())
     read_worksheet_df.columns = list(read_worksheet_df.loc[0, :])
     read_worksheet_df.drop(0, inplace=True)
     pickup_df_text = ''
+    
+    options = Options()
+    options.add_argument('--headless')
+    browser = webdriver.Chrome(ChromeDriverManager().install(),options=options)
+
+    url = f"https://ana-slo.com/{value['-text_date-']}-{value['-tenpo_name-']}-data/"
+    print(url)
+    print('データ取得中...30秒ほど時間がかかります。')
+    browser.get(url)
+    html = browser.page_source.encode('utf-8')
+    dfs = pd.read_html(html)
+    #display(tenpo_df)
+    time.sleep(1)
+    elements = browser.find_element(By.CLASS_NAME, 'st-catgroup')
+    prefecture = elements.text.split(' ')[-1]
+    tab_element_list :list = browser.find_elements_by_class_name('tab-menu_item')
+
+    class CustomListener(AbstractEventListener):
+        def before_click(self, element,browser):
+            # 要素までスクロールさせる
+            browser.execute_script('arguments[0].scrollIntoView({behavior: "smooth", block: "start"});', element)
+
+    for i,element in enumerate(tab_element_list):
+        print(i)
+        if i % 2 != 0:
+            element.click()
+            browser.implicitly_wait(2)
+        else:
+            pass
+            #print(i)
+
+        
+    pickup_df_text = ''
     for target_num in read_worksheet_df['対象'].unique():
+        target_dir = 'temp'
+        
+        os.mkdir(target_dir)
+
         if target_num == '':
             print('continue')
             continue
@@ -181,9 +339,40 @@ def post_wordpress(workbook,worksheet,value):
         #read_worksheet_df = read_worksheet_df.drop("対象", axis=1)
         
         extract_read_worksheet_df = extract_read_worksheet_df[['機種名','台番号','G数','差枚','BB','RB','合成確率']]
-        #display(extract_read_worksheet_df)
-        #print(extract_read_worksheet_df.to_html(justify='justify-all',index=False))
+        for dai_number in  extract_read_worksheet_df['台番号']:
+            element = browser.find_element_by_id(str(dai_number))
+            scroll = CustomListener()
+            scroll.before_click(element,browser)
+            time.sleep(1)
+            browser.implicitly_wait(2)
+            parents_element = element.find_element_by_xpath('..')
+
+            png = parents_element.screenshot_as_png
+            # ファイルに保存
+            with open(f'temp/{dai_number}.png', 'wb') as f:
+                f.write(png)
+
+        files = glob.glob("temp/*")
+        im_list = []
+
+        for file in files:
+            print(file)
+            im = Image.open(file)
+            w, h = im.size
+            draw = ImageDraw.Draw(im)
+            draw.rectangle((0, 0, w-1, h-1), outline = (255,255,255))
+            im.save(file)
+            im_list.append(im)
+        print(im_list)
+        upload_image_path = generate_pickup_slump_graphe_image(im_list,value,target_num)
+        output_path = f'completed_image_{value["-text_date-"]}-{value["-tenpo_name-"]}_{target_num}.png'
+        resize_image(upload_image_path)
+        upload_image(upload_image_path,output_path)
         pickup_df_text +=  '<div class="table-wrap">' + extract_read_worksheet_df.to_html(justify='justify-all',index=False) + '</div>'
+        url = f'<a href=http://kansai-sloeve.com/wp-content/uploads/{today.strftime("%Y/%m")}/{output_path}">\n<img src="http://kansai-sloeve.com/wp-content/uploads/{today.strftime("%Y/%m")}/{output_path}" alt="{value["-text_date-"]}-{value["-tenpo_name-"]}_{target_num}" class="alignnone size-full " /></a>'
+        pickup_df_text += '\n' + url + '\n'
+        shutil.rmtree(target_dir)
+    
     pickup_text = '<h2>注目ピックアップ</h2>\n[st-kaiwa1]今回の並びでよかった場所がこちら[/st-kaiwa1]'
     
     pickup_text_2 = '\n[st-kaiwa1]今回の並びの一言コメントを記入[/st-kaiwa1]'
@@ -326,6 +515,7 @@ def post_wordpress(workbook,worksheet,value):
     # -*- coding: utf-8 -*-
 
     def main():
+        global wp
         """
         変数を定義
         """
@@ -366,6 +556,17 @@ def post_wordpress(workbook,worksheet,value):
 
 
 
+id = "admin"
+password="slopachi777"
+#idとpasswordはwordpressの管理画面に入るためのもの
+
+url="https://kansai-sloeve.com/xmlrpc.php"
+#第3者が閲覧するURLの後ろに/xmlrpc.phpをつける。
+#ワードプレスの管理画面の後ろにつけるとエラーになった
+today = datetime.date.today()
+
+wp = Client(url, id,password)
+
 yesterday = datetime.date.today() + datetime.timedelta(days=-1)
 
 layout = [ 
@@ -402,8 +603,8 @@ while True:
             print('記事投稿開始')
             post_wordpress(workbook,worksheet,value)
             sg.popup('下書きに投稿しました')
-            workbook.del_worksheet(worksheet)
-            workbook.del_worksheet(worksheet2)
+            #workbook.del_worksheet(worksheet)
+            #workbook.del_worksheet(worksheet2)
 
 window.close()
 #tenpo_day_data_df
