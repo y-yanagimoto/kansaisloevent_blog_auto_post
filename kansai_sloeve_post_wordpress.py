@@ -1,4 +1,4 @@
-
+import math
 import PySimpleGUI as sg
 import requests
 from time import sleep
@@ -89,53 +89,36 @@ def generate_pickup_slump_graphe_image(im_list,value,target_num):
     if len(im_list) <= 4:
         get_concat_h_multi_resize(im_list).save(upload_image_path)
 
-    elif 4 < len(im_list) <= 8:
-        get_concat_h_multi_resize(im_list[:4]).save('temp/h_concat_1.png')
-        im = Image.open('image/white.png')
-        while True:
-            im_list.append(im)
-            if len(im_list) == 8:
-                break
-        get_concat_h_multi_resize(im_list[4:]).save('temp/h_concat_2.png')
-        
-        im1 = Image.open('temp/h_concat_1.png')
-        im2 = Image.open('temp/h_concat_2.png')
-        get_concat_v_multi_resize([im1,im2]).save(upload_image_path)
-
-    elif 8 < len(im_list) <= 12:
-        get_concat_h_multi_resize(im_list[:4]).save('temp/h_concat_1.png')
-        get_concat_h_multi_resize(im_list[4:8]).save('temp/h_concat_2.png')
-        im = Image.open('image/white.png')
-        while True:
-            im_list.append(im)
-            if len(im_list) >= 12:
-                break
-        get_concat_h_multi_resize(im_list[8:]).save('temp/h_concat_3.png')
-        im1 = Image.open('temp/h_concat_1.png')
-        im2 = Image.open('temp/h_concat_2.png')
-        im3 = Image.open('temp/h_concat_3.png')
-        get_concat_v_multi_resize([im1,im2,im3]).save(upload_image_path)
-
-    elif 12 < len(im_list) <= 16:
-        get_concat_h_multi_resize(im_list[:4]).save('temp/h_concat_1.png')
-        get_concat_h_multi_resize(im_list[4:8]).save('temp/h_concat_2.png')
-        get_concat_h_multi_resize(im_list[8:12]).save('temp/h_concat_3.png')
-        im = Image.open('image/white.png')
-        while True:
-            im_list.append(im)
-            if len(im_list) >= 16:
-                break
-        get_concat_h_multi_resize(im_list[12:]).save('temp/h_concat_4.png')
-        im1 = Image.open('temp/h_concat_1.png')
-        im2 = Image.open('temp/h_concat_2.png')
-        im3 = Image.open('temp/h_concat_3.png')
-        im4 = Image.open('temp/h_concat_4.png')
-        get_concat_v_multi_resize([im1,im2,im3,im4]).save(upload_image_path)
     else:
-        print('パスしました')
-        pass
+        row = len(im_list) // 4
+        print(row)
+        new_list = []
+        image_concat_list = []
+        im = Image.open('image/white.png')
+        while True:
+            im_list.append(im)
+            if len(im_list) % 4 == 0:
+                break
+
+        for i in range(row+1):
+            new_list = []
+            for _  in range(4):
+                num = im_list.pop(0)
+                new_list.append(num)
+            print(new_list,i)
+            get_concat_h_multi_resize(new_list).save(f'temp/h_concat_{i}.png')
+            concat_image = Image.open(f'temp/h_concat_{i}.png')
+            image_concat_list.append(concat_image)
+
+        get_concat_v_multi_resize(image_concat_list).save(upload_image_path)
+        
     return upload_image_path
 
+def convert_size(size, unit="B"):
+    units = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB")
+    i = units.index(unit.upper())
+    size = int(round(size / 1024 ** i, 2))
+    return size
 
 def resize_image(image_path):
     conpleted_im = Image.open(image_path)
@@ -295,9 +278,9 @@ def post_wordpress(workbook,worksheet,value):
     read_worksheet_df.drop(0, inplace=True)
     pickup_df_text = ''
     
-    options = Options()
-    options.add_argument('--headless')
-    browser = webdriver.Chrome(ChromeDriverManager().install(),options=options)
+    #options = Options()
+    #options.add_argument('--headless')
+    browser = webdriver.Chrome(ChromeDriverManager().install())
 
     url = f"https://ana-slo.com/{value['-text_date-']}-{value['-tenpo_name-']}-data/"
     print(url)
@@ -329,13 +312,16 @@ def post_wordpress(workbook,worksheet,value):
     pickup_df_text = ''
     for target_num in read_worksheet_df['対象'].unique():
         target_dir = 'temp'
-        
+        try:
+            shutil.rmtree(target_dir)
+        except:
+            pass
         os.mkdir(target_dir)
 
         if target_num == '':
             print('continue')
             continue
-        extract_read_worksheet_df = read_worksheet_df.query('対象.str.contains(@target_num)', engine='python')
+        extract_read_worksheet_df = read_worksheet_df[read_worksheet_df['対象'] == target_num]
         #read_worksheet_df = read_worksheet_df.drop("対象", axis=1)
         
         extract_read_worksheet_df = extract_read_worksheet_df[['機種名','台番号','G数','差枚','BB','RB','合成確率']]
@@ -370,6 +356,11 @@ def post_wordpress(workbook,worksheet,value):
         upload_image(upload_image_path,output_path)
         pickup_df_text +=  '<div class="table-wrap">' + extract_read_worksheet_df.to_html(justify='justify-all',index=False) + '</div>'
         url = f'<a href=http://kansai-sloeve.com/wp-content/uploads/{today.strftime("%Y/%m")}/{output_path}">\n<img src="http://kansai-sloeve.com/wp-content/uploads/{today.strftime("%Y/%m")}/{output_path}" alt="{value["-text_date-"]}-{value["-tenpo_name-"]}_{target_num}" class="alignnone size-full " /></a>'
+        image_size  = os.path.getsize('temp/'+output_path)
+        convert_image_size = convert_size(image_size)
+        if convert_image_size >= 300000:
+            url = url.replace('png','jpg')
+        print('urlは',url)
         pickup_df_text += '\n' + url + '\n'
         shutil.rmtree(target_dir)
     
@@ -571,7 +562,7 @@ yesterday = datetime.date.today() + datetime.timedelta(days=-1)
 
 layout = [ 
     [sg.Text('読み取り対象の店舗名と日付けを指定してください')  ],
-    [sg.Text("店舗名入力欄"), sg.Input(default_text='123笹塚店', key="-tenpo_name-")],
+    [sg.Text("店舗名入力欄"), sg.Input(default_text='キクヤ堺北店', key="-tenpo_name-")],
     [sg.Input(key='-text_date-', size=(30,1)),sg.CalendarButton('日付選択',format='%Y-%m-%d',default_date_m_d_y=(yesterday.month, yesterday.day, yesterday.year),locale='ja_JP', key='-button_calendar-',target='-text_date-')],
     [sg.Button('OK', key='-OK-'), sg.Cancel()],
     [sg.Output(size=(50, 5))]]
